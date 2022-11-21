@@ -1,0 +1,79 @@
+/* Top Bar Section Start */
+.top-bar-background{
+    background-color: black;
+}
+
+.top-bar{
+    background-color: black;
+    height: 30px;
+    max-width: 1500px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+.top-bar-container {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    
+}
+/* Top Bar Section End */
+
+
+
+/* Top Bar Left Section Start */
+
+.top-bar-left-welcome {
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+/* Top Bar Left Section Start */
+
+.top-bar-middle {
+    flex: 1;
+    
+}
+
+
+
+/* Top Bar Right Section Start*/
+
+.top-bar-right {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px 
+}
+
+.top-bar-right-content {
+    display: flex;
+    align-items: center;
+}    
+
+.top-bar-right-contact-us {
+    font-size: 13px;
+    margin-right: 15px;
+}
+
+.google-icon,
+.facebook-icon,
+.call-icon {
+    width: 14px;
+    border-radius: 7.5px;
+    margin-left: 5px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.google-icon:hover,
+.facebook-icon:hover,
+.call-icon:hover {
+    opacity: 0.6;
+}
+
+/* Top Bar Right Section End*/

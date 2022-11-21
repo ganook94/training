@@ -1,0 +1,28 @@
+body{
+   font-family: Roboto,Arial;
+   margin: 0;
+   padding: 0;
+}
+
+p {
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    
+
+}
+
+h6 {
+    margin: 0;
+    padding: 0;
+}
+
+a{
+    color: white;
+    text-decoration: none;
+}
