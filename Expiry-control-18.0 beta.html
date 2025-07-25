@@ -1,0 +1,1778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrefour Expiry Control</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <!-- Polyfill for older browsers -->
+    <script src="https://cdn.polyfill.io/v3/polyfill.min.js?features=default,es6,Object.entries,Object.values,Array.prototype.includes,Promise,fetch,Number.isInteger"></script>
+    <style>
+        /* CSS variables with fallbacks */
+        :root {
+            --primary-blue: #00387b;
+            --alert-red: #bb1e10;
+            --action-orange: #f67828;
+            --confirm-green: #237f52;
+            --light-gray: #f5f7fa;
+            --dark-gray: #333;
+            --text-dark: #2c3e50;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #2c3e50; /* Fallback */
+            color: var(--text-dark);
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e7eb 100%);
+            min-height: 100vh;
+            padding-bottom: 70px;
+        }
+
+        header {
+            background: #00387b; /* Fallback */
+            background: var(--primary-blue);
+            color: white;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+
+        .logo {
+            height: 45px;
+            margin-right: 15px;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+        }
+
+        .header-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 25px;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 25px;
+        }
+
+        @media (min-width: 992px) {
+            .dashboard {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f67828; /* Fallback */
+            border-bottom: 2px solid var(--action-orange);
+        }
+
+        .card-title {
+            color: #00387b; /* Fallback */
+            color: var(--primary-blue);
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-left: 12px;
+        }
+
+        .card-icon {
+            background: #00387b; /* Fallback */
+            background: var(--primary-blue);
+            color: white;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .status-count {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+            line-height: 1;
+        }
+
+        .status-label {
+            font-size: 0.95rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .pending .status-count {
+            color: #f67828; /* Fallback */
+            color: var(--action-orange);
+        }
+
+        .completed .status-count {
+            color: #237f52; /* Fallback */
+            color: var(--confirm-green);
+        }
+
+        .expiring .status-count {
+            color: #bb1e10; /* Fallback */
+            color: var(--alert-red);
+        }
+
+        .file-input-container {
+            position: relative;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            background: #237f52; /* Fallback */
+            background: var(--confirm-green);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(38, 127, 82, 0.3);
+        }
+
+        .file-input-label:hover {
+            background: #1a6b46;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(38, 127, 82, 0.4);
+        }
+
+        .file-input {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .scanner-container {
+            margin-top: 20px;
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        #scanner-viewport {
+            width: 100%;
+            height: 300px;
+            background: #333;
+            position: relative;
+            overflow: hidden;
+            border-radius: 12px;
+            border: 3px solid #00387b; /* Fallback */
+            border: 3px solid var(--primary-blue);
+        }
+
+        #camera-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .scanner-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .scanner-frame {
+            width: 70%;
+            height: 150px;
+            border: 3px solid #f67828; /* Fallback */
+            border: 3px solid var(--action-orange);
+            border-radius: 8px;
+            box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .scanner-laser {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: #bb1e10; /* Fallback */
+            background: var(--alert-red);
+            animation: scan 2s infinite linear;
+            box-shadow: 0 0 10px rgba(187, 30, 16, 0.8);
+        }
+
+        @keyframes scan {
+            0% { top: 0; }
+            50% { top: 100%; }
+            100% { top: 0; }
+        }
+
+        .scanner-controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-scan {
+            background: #f67828; /* Fallback */
+            background: var(--action-orange);
+            color: white;
+        }
+
+        .btn-scan:hover:not(:disabled) {
+            background: #e06d1f;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(246, 120, 40, 0.4);
+        }
+
+        .btn-export {
+            background: #237f52; /* Fallback */
+            background: var(--confirm-green);
+            color: white;
+        }
+
+        .btn-export:hover:not(:disabled) {
+            background: #1a6b46;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(38, 127, 82, 0.4);
+        }
+
+        .btn-secondary {
+            background: #00387b; /* Fallback */
+            background: var(--primary-blue);
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #002a5f;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 56, 123, 0.4);
+        }
+
+        .btn-danger {
+            background: #bb1e10; /* Fallback */
+            background: var(--alert-red);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #a61a0e;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(187, 30, 16, 0.4);
+        }
+
+        .manual-input {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .manual-input input {
+            flex: 1;
+            padding: 14px 18px;
+            border: 2px solid #ddd;
+            border-radius: 50px;
+            font-size: 16px;
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.05);
+            transition: border-color 0.3s;
+        }
+
+        .manual-input input:focus {
+            border-color: #f67828; /* Fallback */
+            border-color: var(--action-orange);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(246, 120, 40, 0.2);
+        }
+
+        .expiry-form {
+            margin-top: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border-left: 5px solid #f67828; /* Fallback */
+            border-left: 5px solid var(--action-orange);
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #00387b; /* Fallback */
+            color: var(--primary-blue);
+            font-size: 1.05rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus {
+            border-color: #f67828; /* Fallback */
+            border-color: var(--action-orange);
+            box-shadow: 0 0 0 3px rgba(246, 120, 40, 0.2);
+            outline: none;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .product-details {
+            background: linear-gradient(to right, #e8f4ff, #d6e9ff);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border: 1px solid #c2d9ff;
+        }
+
+        .detail-row {
+            display: flex;
+            margin-bottom: 10px;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            min-width: 100px;
+            color: #00387b; /* Fallback */
+            color: var(--primary-blue);
+        }
+
+        .detail-value {
+            flex: 1;
+            color: #2c3e50; /* Fallback */
+            color: var(--text-dark);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e1e4e8;
+        }
+
+        .tab {
+            padding: 12px 25px;
+            cursor: pointer;
+            font-weight: 600;
+            border-radius: 8px 8px 0 0;
+            background: #f0f2f5;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: #00387b; /* Fallback */
+            background: var(--primary-blue);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .product-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .product-table th {
+            background: #00387b; /* Fallback */
+            background: var(--primary-blue);
+            color: white;
+            padding: 14px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .product-table td {
+            padding: 14px;
+            border-bottom: 1px solid #e1e4e8;
+        }
+
+        .product-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .product-table tr:hover {
+            background-color: #edf2ff;
+        }
+
+        .expiry-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .expiry-normal {
+            background: #e3f9ee;
+            color: #237f52; /* Fallback */
+            color: var(--confirm-green);
+        }
+
+        .expiring-soon {
+            background: #fef0e5;
+            color: #f67828; /* Fallback */
+            color: var(--action-orange);
+        }
+
+        .expired {
+            background: #fdecea;
+            color: #bb1e10; /* Fallback */
+            color: var(--alert-red);
+        }
+
+        .action-cell {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .edit-btn {
+            background: #e3f0ff;
+            color: #00387b; /* Fallback */
+            color: var(--primary-blue);
+            border: 1px solid #b8d4ff;
+        }
+
+        .edit-btn:hover {
+            background: #d0e3ff;
+        }
+
+        .delete-btn {
+            background: #fdecea;
+            color: #bb1e10; /* Fallback */
+            color: var(--alert-red);
+            border: 1px solid #f9c9c5;
+        }
+
+        .delete-btn:hover {
+            background: #fcdbd7;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #777;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            color: #cbd5e0;
+        }
+
+        .footer {
+            background: #00387b; /* Fallback */
+            background: var(--primary-blue);
+            color: white;
+            text-align: center;
+            padding: 20px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            font-size: 0.95rem;
+            box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            transform: translateX(150%);
+            transition: transform 0.4s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: #237f52; /* Fallback */
+            background: var(--confirm-green);
+            border-left: 5px solid #1a6b46;
+        }
+
+        .notification.error {
+            background: #bb1e10; /* Fallback */
+            background: var(--alert-red);
+            border-left: 5px solid #a61a0e;
+        }
+
+        .import-guide {
+            background: #f0f8ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 2px dashed #00387b; /* Fallback */
+            border: 2px dashed var(--primary-blue);
+        }
+
+        .import-guide h3 {
+            color: #00387b; /* Fallback */
+            color: var(--primary-blue);
+            margin-bottom: 15px;
+        }
+
+        .import-guide ol {
+            padding-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        .import-guide li {
+            margin-bottom: 8px;
+        }
+
+        .download-template {
+            display: inline-block;
+            background: #00387b; /* Fallback */
+            background: var(--primary-blue);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .scan-focus {
+            text-align: center;
+            padding: 20px;
+            background: #e8f4ff;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 2px solid #00387b; /* Fallback */
+            border: 2px solid var(--primary-blue);
+        }
+
+        .scan-focus h3 {
+            color: #00387b; /* Fallback */
+            color: var(--primary-blue);
+            margin-bottom: 15px;
+        }
+
+        .scan-focus p {
+            margin-bottom: 15px;
+        }
+
+        .data-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+
+        .duplicate-warning {
+            color: #bb1e10; /* Fallback */
+            color: var(--alert-red);
+            font-size: 0.9rem;
+            margin-top: 5px;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header-title {
+                font-size: 1.2rem;
+            }
+            
+            .logo {
+                height: 38px;
+            }
+            
+            .card {
+                padding: 20px;
+            }
+            
+            #scanner-viewport {
+                height: 250px;
+            }
+            
+            .scanner-controls {
+                flex-direction: column;
+            }
+            
+            .manual-input {
+                flex-direction: column;
+            }
+            
+            .tabs {
+                overflow-x: auto;
+                padding-bottom: 5px;
+            }
+            
+            .data-actions {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        @media (max-width: 480px) {
+            header {
+                padding: 12px 10px;
+            }
+            
+            .header-title {
+                font-size: 1.1rem;
+            }
+            
+            .logo {
+                height: 35px;
+                margin-right: 10px;
+            }
+            
+            .card-title {
+                font-size: 1.15rem;
+            }
+            
+            .btn {
+                padding: 10px 20px;
+                font-size: 0.95rem;
+            }
+            
+            .form-actions {
+                flex-direction: column;
+            }
+            
+            .form-actions .btn {
+                width: 100%;
+            }
+            
+            #scanner-viewport {
+                height: 220px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgODAiPjxyZWN0IHdpZHRoPSIyNDAiIGhlaWdodD0iODAiIGZpbGw9IiMwMDM4N2IiLz48cGF0aCBkPSJNNTAgMjAgTDIwIDUwIEw1MCA4MCBMMTAgODAgTDEwIDIwIFoiIGZpbGw9IiNmZmYiLz48cGF0aCBkPSJNNjAgMjAgTDkwIDUwIEw2MCA4MCBMMTAwIDgwIEwxMDAgMjAgWiIgZmlsbD0iI2ZmZiIvPjxwYXRoIGQ9Ik03MCAyMCBMMTIwIDUwIEw3MCA4MCBMMTkwIDgwIEwxOTAgMjAgWiIgZmlsbD0iI2ZmZiIvPjx0ZXh0IHg9IjEyMCIgeT0iNTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iI2ZmZiI+UGFraXN0YW48L3RleHQ+PC9zdmc+" alt="Carrefour Pakistan" class="logo">
+            <h1 class="header-title">Expiry Control System</h1>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="dashboard">
+            <div class="card" id="import-section">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-upload"></i>
+                    </div>
+                    <h2 class="card-title">Product Import</h2>
+                </div>
+                
+                <div class="import-guide">
+                    <h3><i class="fas fa-info-circle"></i> Import Guide</h3>
+                    <ol>
+                        <li>Download the template using the button below</li>
+                        <li>Fill in your product information</li>
+                        <li>Save the file and upload it here</li>
+                        <li>Ensure columns are in order: Barcode, Item No, Description</li>
+                        <li>Barcodes must be 8-14 digits</li>
+                    </ol>
+                    <a href="#" class="download-template" id="download-template">
+                        <i class="fas fa-download"></i> Download Template
+                    </a>
+                </div>
+                
+                <div class="file-input-container">
+                    <label for="excel-import" class="file-input-label">
+                        <i class="fas fa-file-excel"></i> Select Excel File
+                    </label>
+                    <input type="file" id="excel-import" class="file-input" accept=".xlsx, .xls">
+                </div>
+                
+                <div class="status-grid">
+                    <div class="status-card">
+                        <div class="status-count" id="product-count">0</div>
+                        <div class="status-label">Products Imported</div>
+                    </div>
+                    <div class="status-card pending">
+                        <div class="status-count" id="pending-count">0</div>
+                        <div class="status-label">Pending Scans</div>
+                    </div>
+                    <div class="status-card completed">
+                        <div class="status-count" id="completed-count">0</div>
+                        <div class="status-label">Completed Scans</div>
+                    </div>
+                </div>
+                
+                <div class="scan-focus">
+                    <h3><i class="fas fa-camera"></i> Scanning Mode</h3>
+                    <p>After importing your product data, the system will automatically switch to scanning mode.</p>
+                    <p>No product list will be displayed - all data is used exclusively for scanning operations.</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <i class="fas fa-qrcode"></i>
+                    </div>
+                    <h2 class="card-title">Barcode Scanning</h2>
+                </div>
+                
+                <p>Scan product barcodes using your device camera or enter manually.</p>
+                
+                <div class="scanner-container">
+                    <div id="scanner-viewport">
+                        <video id="camera-preview" autoplay playsinline></video>
+                        <div class="scanner-overlay">
+                            <div class="scanner-frame">
+                                <div class="scanner-laser"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="scanner-controls">
+                        <button class="btn btn-scan" id="start-camera">
+                            <i class="fas fa-camera"></i> Start Camera
+                        </button>
+                        <button class="btn btn-danger" id="stop-camera">
+                            <i class="fas fa-stop"></i> Stop Camera
+                        </button>
+                    </div>
+                    
+                    <div class="manual-input">
+                        <input type="text" id="manual-barcode" placeholder="Enter barcode manually">
+                        <button class="btn btn-secondary" id="manual-submit">
+                            <i class="fas fa-arrow-right"></i> Submit
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="expiry-form" id="expiry-form">
+                    <div class="product-details">
+                        <div class="detail-row">
+                            <div class="detail-label">Barcode:</div>
+                            <div class="detail-value" id="form-barcode">-</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Item No:</div>
+                            <div class="detail-value" id="form-itemno">-</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Description:</div>
+                            <div class="detail-value" id="form-description">-</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="batch-number"><i class="fas fa-hashtag"></i> Batch Number</label>
+                        <input type="text" id="batch-number" placeholder="Enter batch number (4-12 characters)">
+                        <div class="duplicate-warning" id="duplicate-warning">
+                            <i class="fas fa-exclamation-triangle"></i> Batch with same expiry already exists! Quantity will be merged.
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="quantity"><i class="fas fa-cubes"></i> Quantity</label>
+                        <input type="number" id="quantity" min="1" value="1">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="expiry-date"><i class="fas fa-calendar-day"></i> Expiry Date</label>
+                        <input type="text" id="expiry-date" placeholder="YYYY/MM/DD" pattern="\d{4}/\d{2}/\d{2}">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button class="btn btn-danger" id="cancel-form">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        <button class="btn btn-export" id="save-form">
+                            <i class="fas fa-save"></i> Save Record
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="tabs">
+                <div class="tab active" data-tab="expiry">Expiry Records</div>
+                <div class="tab" data-tab="export">Export Data</div>
+                <div class="tab" data-tab="manage">Manage Data</div>
+            </div>
+            
+            <div class="tab-content active" id="expiry-tab">
+                <h3>Expiry Records</h3>
+                <div class="table-container">
+                    <table class="product-table" id="expiry-table">
+                        <thead>
+                            <tr>
+                                <th>Barcode</th>
+                                <th>Item No</th>
+                                <th>Batch</th>
+                                <th>Qty</th>
+                                <th>Expiry Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expiry-body">
+                            <!-- Expiry records will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="export-tab">
+                <h3>Export Expiry Data</h3>
+                <p>Export scanned expiry data to Excel. Records will be sorted by nearest expiry date.</p>
+                
+                <div class="export-options">
+                    <div class="form-group">
+                        <label for="export-sort"><i class="fas fa-sort-amount-down"></i> Sort By</label>
+                        <select id="export-sort" class="form-control">
+                            <option value="nearest">Nearest Expiry First</option>
+                            <option value="farthest">Farthest Expiry First</option>
+                            <option value="recent">Most Recent Scans First</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="export-status"><i class="fas fa-filter"></i> Filter By Status</label>
+                        <select id="export-status" class="form-control">
+                            <option value="all">All Records</option>
+                            <option value="expiring">Expiring Soon (within 30 days)</option>
+                            <option value="expired">Expired</option>
+                            <option value="valid">Valid (over 30 days)</option>
+                        </select>
+                    </div>
+                    
+                    <button class="btn btn-export" id="export-btn" style="width: 100%; padding: 15px;">
+                        <i class="fas fa-file-export"></i> Export to Excel
+                    </button>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="manage-tab">
+                <h3>Manage Application Data</h3>
+                <p>Upload new product data or clear existing data from the system.</p>
+                
+                <div class="import-guide">
+                    <h4>Upload New Product Data</h4>
+                    <div class="file-input-container">
+                        <label for="new-excel-import" class="file-input-label">
+                            <i class="fas fa-file-excel"></i> Select New Excel File
+                        </label>
+                        <input type="file" id="new-excel-import" class="file-input" accept=".xlsx, .xls">
+                    </div>
+                </div>
+                
+                <div class="data-actions">
+                    <button class="btn btn-danger" id="clear-data">
+                        <i class="fas fa-trash"></i> Clear All Data
+                    </button>
+                    <button class="btn btn-secondary" id="download-data">
+                        <i class="fas fa-download"></i> Download Backup
+                    </button>
+                </div>
+                
+                <div class="scan-focus">
+                    <h4><i class="fas fa-info-circle"></i> Important Notes</h4>
+                    <ul>
+                        <li>Uploading a new file will replace existing product data</li>
+                        <li>Expiry records will be preserved when uploading new product data</li>
+                        <li>Clearing data will remove both products and expiry records</li>
+                        <li>Download backup before clearing data</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        Carrefour Pakistan Expiry Control System &copy; 2023 | Offline Mode
+    </div>
+    
+    <div class="notification" id="notification">
+        <span id="notification-message">Notification message</span>
+    </div>
+
+    <script>
+        // Browser compatibility check
+        function checkBrowserCompatibility() {
+            if (typeof Promise === 'undefined' || typeof Object.entries === 'undefined') {
+                const notification = document.getElementById('notification');
+                notification.className = "notification error show";
+                document.getElementById('notification-message').textContent = 
+                    "Your browser is outdated. Please use a modern browser like Chrome, Firefox, or Edge.";
+                
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, 10000);
+                
+                return false;
+            }
+            return true;
+        }
+        
+        // Universal date parser for cross-browser compatibility
+        function parseDate(dateString) {
+            if (!dateString) return null;
+            
+            // Support both YYYY/MM/DD and YYYY-MM-DD formats
+            const parts = dateString.split(/[\/\-]/);
+            if (parts.length !== 3) return null;
+            
+            // Create date in UTC to avoid timezone issues
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1; // Months are 0-indexed
+            const day = parseInt(parts[2], 10);
+            
+            return new Date(Date.UTC(year, month, day));
+        }
+        
+        // Date validation for expiry date
+        function validateExpiryDate(dateString) {
+            return /^\d{4}[\/\-]\d{2}[\/\-]\d{2}$/.test(dateString);
+        }
+        
+        // Format date to YYYY/MM/DD
+        function formatDate(date) {
+            if (!date) return '';
+            const d = new Date(date);
+            return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        // Data storage and management
+        const storage = {
+            products: JSON.parse(localStorage.getItem('products')) || [],
+            expiryRecords: JSON.parse(localStorage.getItem('expiryRecords')) || [],
+            currentProduct: null,
+            
+            saveProducts() {
+                localStorage.setItem('products', JSON.stringify(this.products));
+                this.updateUI();
+                this.showNotification('Products imported successfully! Scanning ready.', 'success');
+            },
+            
+            saveRecords() {
+                localStorage.setItem('expiryRecords', JSON.stringify(this.expiryRecords));
+                this.updateUI();
+            },
+            
+            addRecord(record) {
+                // Check for existing record with same barcode, batch and expiry
+                const existingIndex = this.expiryRecords.findIndex(r => 
+                    r.barcode === record.barcode && 
+                    r.batch === record.batch && 
+                    r.expiryDate === record.expiryDate
+                );
+                
+                if (existingIndex >= 0) {
+                    // Merge quantities
+                    this.expiryRecords[existingIndex].quantity += record.quantity;
+                    this.saveRecords();
+                    this.showNotification('Quantity updated for existing batch!', 'success');
+                } else {
+                    // Add new record
+                    this.expiryRecords.push(record);
+                    this.saveRecords();
+                    this.showNotification('New expiry record saved!', 'success');
+                }
+            },
+            
+            updateRecord(index, record) {
+                this.expiryRecords[index] = record;
+                this.saveRecords();
+            },
+            
+            deleteRecord(index) {
+                this.expiryRecords.splice(index, 1);
+                this.saveRecords();
+                this.showNotification('Record deleted!', 'error');
+            },
+            
+            updateUI() {
+                // Update product count
+                document.getElementById('product-count').textContent = this.products.length;
+                
+                // Update pending and completed counts
+                const completedCount = this.expiryRecords.length;
+                document.getElementById('pending-count').textContent = this.products.length - completedCount;
+                document.getElementById('completed-count').textContent = completedCount;
+                
+                // Update expiry table
+                this.renderExpiryTable();
+                
+                // Hide import section if products exist
+                if (this.products.length > 0) {
+                    document.getElementById('import-section').style.display = 'none';
+                } else {
+                    document.getElementById('import-section').style.display = 'block';
+                }
+            },
+            
+            renderExpiryTable() {
+                const container = document.getElementById('expiry-body');
+                
+                if (this.expiryRecords.length === 0) {
+                    container.innerHTML = `<tr><td colspan="7" class="empty-state">
+                        <i class="fas fa-file-medical"></i>
+                        <p>No expiry records yet. Scan products to add records.</p>
+                    </td></tr>`;
+                    return;
+                }
+                
+                let html = '';
+                this.expiryRecords.forEach((record, index) => {
+                    // Calculate expiry status using universal date parser
+                    const today = new Date();
+                    const expiryDate = parseDate(record.expiryDate);
+                    const diffDays = expiryDate ? Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24)) : -1;
+                    
+                    let statusClass, statusText;
+                    if (diffDays < 0) {
+                        statusClass = 'expired';
+                        statusText = 'Expired';
+                    } else if (diffDays <= 30) {
+                        statusClass = 'expiring-soon';
+                        statusText = `Expiring in ${diffDays} days`;
+                    } else {
+                        statusClass = 'expiry-normal';
+                        statusText = `Valid (${diffDays} days)`;
+                    }
+                    
+                    html += `
+                        <tr>
+                            <td>${record.barcode}</td>
+                            <td>${record.itemNo}</td>
+                            <td>${record.batch}</td>
+                            <td>${record.quantity}</td>
+                            <td>${record.expiryDate}</td>
+                            <td><span class="expiry-badge ${statusClass}">${statusText}</span></td>
+                            <td class="action-cell">
+                                <button class="action-btn edit-btn" data-index="${index}">
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                                <button class="action-btn delete-btn" data-index="${index}">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                container.innerHTML = html;
+                
+                // Add event listeners to action buttons
+                document.querySelectorAll('.edit-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const index = btn.getAttribute('data-index');
+                        scannerManager.editRecord(index);
+                    });
+                });
+                
+                document.querySelectorAll('.delete-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const index = btn.getAttribute('data-index');
+                        if (confirm('Are you sure you want to delete this record?')) {
+                            this.deleteRecord(index);
+                        }
+                    });
+                });
+            },
+            
+            showNotification(message, type) {
+                const notification = document.getElementById('notification');
+                notification.className = `notification ${type} show`;
+                document.getElementById('notification-message').textContent = message;
+                
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, 3000);
+            },
+            
+            clearAllData() {
+                if (confirm("Are you sure you want to clear ALL data? This cannot be undone.")) {
+                    localStorage.removeItem('products');
+                    localStorage.removeItem('expiryRecords');
+                    this.products = [];
+                    this.expiryRecords = [];
+                    this.updateUI();
+                    this.showNotification('All data has been cleared!', 'error');
+                }
+            },
+            
+            downloadBackup() {
+                const data = {
+                    products: this.products,
+                    expiryRecords: this.expiryRecords,
+                    timestamp: new Date().toISOString()
+                };
+                
+                const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `expiry-control-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                this.showNotification('Backup downloaded successfully!', 'success');
+            }
+        };
+        
+        // Excel import functionality
+        const excelManager = {
+            init() {
+                document.getElementById('excel-import').addEventListener('change', this.importFile.bind(this));
+                document.getElementById('new-excel-import').addEventListener('change', this.importFile.bind(this));
+                document.getElementById('download-template').addEventListener('click', this.downloadTemplate.bind(this));
+            },
+            
+            downloadTemplate(e) {
+                e.preventDefault();
+                
+                // Create template data
+                const templateData = [
+                    { Barcode: '1234567890123', 'Item No': 'AB-1001', Description: 'Product Description' },
+                    { Barcode: '9876543210987', 'Item No': 'CD-2002', Description: 'Another Product' }
+                ];
+                
+                // Create worksheet and workbook
+                const ws = XLSX.utils.json_to_sheet(templateData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Products");
+                
+                // Export the file
+                XLSX.writeFile(wb, "product-import-template.xlsx");
+                storage.showNotification("Template downloaded successfully!", 'success');
+            },
+            
+            importFile(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        
+                        // Check if workbook has sheets
+                        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+                            storage.showNotification('The Excel file has no sheets', 'error');
+                            return;
+                        }
+
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        
+                        // Check if worksheet exists
+                        if (!worksheet) {
+                            storage.showNotification('The first sheet is empty or invalid', 'error');
+                            return;
+                        }
+
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                        
+                        // Validate and process data
+                        const { validProducts, errors } = this.validateExcelData(jsonData);
+                        
+                        if (validProducts.length > 0) {
+                            storage.products = validProducts;
+                            storage.saveProducts();
+                        }
+                        
+                        if (errors.length > 0) {
+                            storage.showNotification(`${errors.length} rows had invalid data and were skipped`, 'error');
+                        }
+                        
+                        // Reset file input
+                        e.target.value = '';
+                        
+                    } catch (error) {
+                        console.error("Excel import error:", error);
+                        storage.showNotification('Failed to process Excel file. Please ensure the file is in .xlsx or .xls format and has the correct structure.', 'error');
+                    }
+                };
+                
+                reader.onerror = () => {
+                    storage.showNotification('Error reading file. Please try again.', 'error');
+                };
+                
+                reader.readAsArrayBuffer(file);
+            },
+            
+            validateExcelData(data) {
+                const validProducts = [];
+                const errors = [];
+                
+                data.forEach((row, index) => {
+                    // Normalize keys to lowercase
+                    const normalizedRow = {};
+                    for (const key in row) {
+                        normalizedRow[key.trim().toLowerCase()] = row[key];
+                    }
+                    
+                    // Check for required columns
+                    const barcode = normalizedRow['barcode'] || '';
+                    const itemNo = normalizedRow['item no'] || normalizedRow['itemno'] || '';
+                    const description = normalizedRow['description'] || '';
+                    
+                    // Validate barcode
+                    const barcodeStr = String(barcode).trim();
+                    if (!barcodeStr) {
+                        errors.push(`Row ${index + 1}: Barcode is missing`);
+                        return;
+                    }
+                    
+                    if (!/^\d{8,14}$/.test(barcodeStr)) {
+                        errors.push(`Row ${index + 1}: Invalid barcode format (must be 8-14 digits) - "${barcodeStr}"`);
+                        return;
+                    }
+                    
+                    // Validate item number
+                    const itemNoStr = String(itemNo).trim();
+                    if (!itemNoStr) {
+                        errors.push(`Row ${index + 1}: Item No is missing`);
+                        return;
+                    }
+                    
+                    // Validate description
+                    const descriptionStr = String(description).trim();
+                    if (!descriptionStr) {
+                        errors.push(`Row ${index + 1}: Description is missing`);
+                        return;
+                    }
+                    
+                    // Add valid product
+                    validProducts.push({
+                        barcode: barcodeStr,
+                        itemNo: itemNoStr,
+                        description: descriptionStr
+                    });
+                });
+                
+                return { validProducts, errors };
+            }
+        };
+        
+        // Scanning Manager
+        const scannerManager = {
+            isScanning: false,
+            currentRecordIndex: null,
+            
+            init() {
+                // Event listeners
+                document.getElementById('start-camera').addEventListener('click', this.startCamera.bind(this));
+                document.getElementById('stop-camera').addEventListener('click', this.stopCamera.bind(this));
+                document.getElementById('manual-submit').addEventListener('click', this.processManualInput.bind(this));
+                document.getElementById('manual-barcode').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.processManualInput();
+                });
+                
+                // Form handling
+                document.getElementById('cancel-form').addEventListener('click', this.hideForm.bind(this));
+                document.getElementById('save-form').addEventListener('click', this.saveExpiryRecord.bind(this));
+                
+                // Form field listeners for duplicate checking
+                document.getElementById('batch-number').addEventListener('input', this.checkForDuplicate.bind(this));
+                document.getElementById('expiry-date').addEventListener('change', this.checkForDuplicate.bind(this));
+                
+                // Tab handling
+                document.querySelectorAll('.tab').forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                        
+                        tab.classList.add('active');
+                        document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+                    });
+                });
+                
+                // Initialize Quagga
+                this.initQuagga();
+                
+                // Hide form initially
+                this.hideForm();
+            },
+            
+            initQuagga() {
+                // Configure Quagga for barcode scanning
+                const constraints = {
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: "environment" // Use rear camera
+                };
+                
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: document.querySelector('#camera-preview'),
+                        constraints: constraints
+                    },
+                    decoder: {
+                        readers: [
+                            "code_128_reader",
+                            "ean_reader",
+                            "ean_8_reader",
+                            "code_39_reader",
+                            "code_39_vin_reader",
+                            "codabar_reader",
+                            "upc_reader",
+                            "upc_e_reader"
+                        ]
+                    },
+                    locate: true
+                }, (err) => {
+                    if (err) {
+                        console.error("Quagga init error:", err);
+                        if (err.name === 'PermissionDeniedError') {
+                            storage.showNotification("Camera permission denied. Please enable camera access.", 'error');
+                        } else if (err.name === 'NotFoundError') {
+                            storage.showNotification("No camera found on this device.", 'error');
+                        } else {
+                            storage.showNotification("Camera initialization failed: " + err.message, 'error');
+                        }
+                        return;
+                    }
+                    console.log("Quagga initialized successfully");
+                });
+                
+                // Set up barcode detection callback
+                Quagga.onDetected(this.onBarcodeDetected.bind(this));
+            },
+            
+            startCamera() {
+                if (this.isScanning) return;
+                
+                // Safari requires HTTPS for camera access
+                if (window.webkitMediaStream && location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                    storage.showNotification("Camera requires HTTPS in Safari. Please load via HTTPS.", 'error');
+                    return;
+                }
+                
+                Quagga.start();
+                this.isScanning = true;
+                document.getElementById('scanner-viewport').style.display = 'block';
+                document.getElementById('camera-preview').style.display = 'block';
+            },
+            
+            stopCamera() {
+                if (!this.isScanning) return;
+                
+                Quagga.stop();
+                this.isScanning = false;
+                document.getElementById('camera-preview').style.display = 'none';
+            },
+            
+            onBarcodeDetected(result) {
+                if (!this.isScanning) return;
+                
+                const code = result.codeResult.code;
+                
+                // Process the barcode
+                this.processBarcode(code);
+                
+                // Stop scanning temporarily
+                this.stopCamera();
+            },
+            
+            processManualInput() {
+                const barcodeInput = document.getElementById('manual-barcode');
+                const barcode = barcodeInput.value.trim();
+                
+                if (!barcode) return;
+                
+                this.processBarcode(barcode);
+                barcodeInput.value = '';
+            },
+            
+            processBarcode(barcode) {
+                // Validate barcode format
+                if (!/^\d{8,14}$/.test(barcode)) {
+                    storage.showNotification("Invalid barcode format. Must be 8-14 digits.", 'error');
+                    return;
+                }
+                
+                // Find the product in storage
+                const product = storage.products.find(p => p.barcode === barcode);
+                
+                if (product) {
+                    this.showExpiryForm(product);
+                } else {
+                    storage.showNotification("Product not found. Import product data first.", 'error');
+                }
+            },
+            
+            showExpiryForm(product) {
+                storage.currentProduct = product;
+                
+                // Populate product details
+                document.getElementById('form-barcode').textContent = product.barcode;
+                document.getElementById('form-itemno').textContent = product.itemNo;
+                document.getElementById('form-description').textContent = product.description;
+                
+                // Reset form fields
+                document.getElementById('batch-number').value = '';
+                document.getElementById('quantity').value = '1';
+                document.getElementById('expiry-date').value = '';
+                this.currentRecordIndex = null;
+                
+                // Hide duplicate warning
+                document.getElementById('duplicate-warning').style.display = 'none';
+                
+                // Show the form
+                document.getElementById('expiry-form').style.display = 'block';
+                
+                // Scroll to the form
+                document.getElementById('expiry-form').scrollIntoView({ behavior: 'smooth' });
+            },
+            
+            checkForDuplicate() {
+                if (!storage.currentProduct) return;
+                
+                const batch = document.getElementById('batch-number').value.trim();
+                const expiryDate = document.getElementById('expiry-date').value;
+                
+                if (!batch || !expiryDate) return;
+                
+                // Check for existing record
+                const existingRecord = storage.expiryRecords.find(r => 
+                    r.barcode === storage.currentProduct.barcode &&
+                    r.batch === batch &&
+                    r.expiryDate === expiryDate
+                );
+                
+                if (existingRecord) {
+                    document.getElementById('duplicate-warning').style.display = 'block';
+                } else {
+                    document.getElementById('duplicate-warning').style.display = 'none';
+                }
+            },
+            
+            editRecord(index) {
+                const record = storage.expiryRecords[index];
+                const product = storage.products.find(p => p.barcode === record.barcode);
+                
+                if (!product) {
+                    storage.showNotification("Product not found in database", 'error');
+                    return;
+                }
+                
+                storage.currentProduct = product;
+                this.currentRecordIndex = index;
+                
+                // Populate product details
+                document.getElementById('form-barcode').textContent = product.barcode;
+                document.getElementById('form-itemno').textContent = product.itemNo;
+                document.getElementById('form-description').textContent = product.description;
+                
+                // Populate form fields
+                document.getElementById('batch-number').value = record.batch;
+                document.getElementById('quantity').value = record.quantity;
+                document.getElementById('expiry-date').value = record.expiryDate;
+                
+                // Show the form
+                document.getElementById('expiry-form').style.display = 'block';
+                
+                // Scroll to the form
+                document.getElementById('expiry-form').scrollIntoView({ behavior: 'smooth' });
+            },
+            
+            hideForm() {
+                document.getElementById('expiry-form').style.display = 'none';
+                storage.currentProduct = null;
+                this.currentRecordIndex = null;
+                
+                // Restart camera if it was scanning
+                if (this.isScanning) {
+                    this.startCamera();
+                }
+            },
+            
+            validateBatchNumber() {
+                const batchInput = document.getElementById('batch-number');
+                const batch = batchInput.value.trim();
+                
+                if (batch && /^[a-zA-Z0-9]{4,12}$/.test(batch)) {
+                    batchInput.style.borderColor = '#ddd';
+                    return true;
+                } else {
+                    batchInput.style.borderColor = '#bb1e10';
+                    return false;
+                }
+            },
+            
+            saveExpiryRecord() {
+                // Validate inputs
+                if (!this.validateBatchNumber()) {
+                    storage.showNotification("Batch number must be 4-12 alphanumeric characters", 'error');
+                    return;
+                }
+                
+                const quantity = parseInt(document.getElementById('quantity').value);
+                if (isNaN(quantity) || quantity < 1) {
+                    storage.showNotification("Please enter a valid quantity (minimum 1)", 'error');
+                    return;
+                }
+                
+                const expiryDate = document.getElementById('expiry-date').value;
+                if (!validateExpiryDate(expiryDate)) {
+                    storage.showNotification("Invalid date format. Please use YYYY/MM/DD", 'error');
+                    return;
+                }
+                
+                // Create record
+                const record = {
+                    barcode: storage.currentProduct.barcode,
+                    itemNo: storage.currentProduct.itemNo,
+                    description: storage.currentProduct.description,
+                    batch: document.getElementById('batch-number').value,
+                    quantity: quantity,
+                    expiryDate: expiryDate,
+                    scannedDate: formatDate(new Date())
+                };
+                
+                // Save or update record
+                if (this.currentRecordIndex === null) {
+                    storage.addRecord(record);
+                } else {
+                    storage.updateRecord(this.currentRecordIndex, record);
+                }
+                
+                // Hide form
+                this.hideForm();
+            }
+        };
+        
+        // Export functionality
+        const exportManager = {
+            init() {
+                document.getElementById('export-btn').addEventListener('click', this.exportData.bind(this));
+            },
+            
+            exportData() {
+                if (storage.expiryRecords.length === 0) {
+                    storage.showNotification("No expiry records to export", 'error');
+                    return;
+                }
+                
+                // Get selected options
+                const sortOption = document.getElementById('export-sort').value;
+                const filterOption = document.getElementById('export-status').value;
+                
+                // Filter records
+                let records = [...storage.expiryRecords];
+                
+                // Apply filter
+                if (filterOption !== 'all') {
+                    const today = new Date();
+                    records = records.filter(record => {
+                        const expiryDate = parseDate(record.expiryDate);
+                        if (!expiryDate) return false;
+                        
+                        const diffDays = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+                        
+                        if (filterOption === 'expiring') return diffDays <= 30 && diffDays >= 0;
+                        if (filterOption === 'expired') return diffDays < 0;
+                        if (filterOption === 'valid') return diffDays > 30;
+                        return true;
+                    });
+                    
+                    if (records.length === 0) {
+                        storage.showNotification("No records match the selected filter", 'error');
+                        return;
+                    }
+                }
+                
+                // Sort records
+                switch (sortOption) {
+                    case 'nearest':
+                        records.sort((a, b) => {
+                            const dateA = parseDate(a.expiryDate) || new Date(0);
+                            const dateB = parseDate(b.expiryDate) || new Date(0);
+                            return dateA - dateB;
+                        });
+                        break;
+                    case 'farthest':
+                        records.sort((a, b) => {
+                            const dateA = parseDate(a.expiryDate) || new Date(0);
+                            const dateB = parseDate(b.expiryDate) || new Date(0);
+                            return dateB - dateA;
+                        });
+                        break;
+                    case 'recent':
+                        records.sort((a, b) => {
+                            const dateA = parseDate(a.scannedDate) || new Date(0);
+                            const dateB = parseDate(b.scannedDate) || new Date(0);
+                            return dateB - dateA;
+                        });
+                        break;
+                }
+                
+                // Prepare worksheet
+                const ws = XLSX.utils.json_to_sheet(records.map(record => ({
+                    "Barcode": record.barcode,
+                    "Item No": record.itemNo,
+                    "Description": record.description,
+                    "Batch": record.batch,
+                    "Quantity": record.quantity,
+                    "Expiry Date": record.expiryDate,
+                    "Scanned Date": record.scannedDate
+                })));
+                
+                // Create workbook and export
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Expiry Records");
+                XLSX.writeFile(wb, `expiry-records-${new Date().toISOString().slice(0, 10)}.xlsx`);
+                
+                storage.showNotification("Exported successfully!", 'success');
+            }
+        };
+        
+        // Data management
+        const dataManager = {
+            init() {
+                document.getElementById('clear-data').addEventListener('click', () => {
+                    storage.clearAllData();
+                });
+                
+                document.getElementById('download-data').addEventListener('click', () => {
+                    storage.downloadBackup();
+                });
+            }
+        };
+        
+        // Initialize the application
+        function initApp() {
+            if (!checkBrowserCompatibility()) return;
+            
+            excelManager.init();
+            scannerManager.init();
+            exportManager.init();
+            dataManager.init();
+            storage.updateUI();
+        }
+        
+        // Start the app when page loads
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
